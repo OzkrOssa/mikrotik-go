@@ -3,6 +3,7 @@ package mikrotik
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"gopkg.in/routeros.v2"
 )
@@ -18,9 +19,9 @@ type Mikrotik interface {
 	EnableSNMP()
 	SetMacFromAC()
 	SetRemoteAddress()
-	GetAddressList(listName string) []map[string]string
-	AddSecretToAddressList(ip string, comment string, addressList string)
-	RemoveSecretFromAddressList(addressListData []map[string]string, addressListComment string)
+	GetAddressList(listName string) []AddressList
+	AddSecretToAddressList(addressList AddressList) AddressList
+	RemoveSecretFromAddressList(addressListData []AddressList, remoteAddress string) AddressList
 }
 
 func NewMikrotikRepository(addr, user, password string) (Mikrotik, error) {
@@ -146,36 +147,52 @@ func (mr *mikrotikRepository) SetRemoteAddress() {
 	}
 }
 
-func (mr *mikrotikRepository) AddSecretToAddressList(ip string, comment string, addressList string) {
+func (mr *mikrotikRepository) AddSecretToAddressList(data AddressList) AddressList {
 
 	reply, _ := mr.client.Run(
 		"/ip/firewall/address-list/add",
-		fmt.Sprintf("=list=%s", addressList),
-		fmt.Sprintf("=address=%s", ip),
-		fmt.Sprintf("=comment=%s", comment),
+		fmt.Sprintf("=list=%s", data.List),
+		fmt.Sprintf("=address=%s", data.Address),
+		fmt.Sprintf("=comment=%s", data.Comment),
 	)
-	log.Println(reply)
-}
-
-func (mr *mikrotikRepository) RemoveSecretFromAddressList(addressListData []map[string]string, ip string) {
-
-	for _, list := range addressListData {
-		if list["address"] == ip {
-			_, err := mr.client.Run(
-				"/ip/firewall/address-list/remove",
-				fmt.Sprintf("=numbers=%s", list[".id"]),
-			)
-
-			if err == nil {
-				log.Println(list)
-			}
+	if reply != nil {
+		return AddressList{
+			Address:      data.Address,
+			Comment:      data.Comment,
+			CreationTime: time.Now().Format("Jan/02/2006 15:04:05"),
+			List:         data.List,
+			Status:       "CORTADO",
 		}
 	}
 
+	return AddressList{}
 }
 
-func (mr *mikrotikRepository) GetAddressList(listName string) []map[string]string {
-	var M []map[string]string
+func (mr *mikrotikRepository) RemoveSecretFromAddressList(addressListData []AddressList, remoteAddress string) AddressList {
+
+	for _, list := range addressListData {
+		if list.Address == remoteAddress {
+			_, err := mr.client.Run(
+				"/ip/firewall/address-list/remove",
+				fmt.Sprintf("=numbers=%s", list.ID),
+			)
+
+			if err == nil {
+				return AddressList{
+					Address:      list.Address,
+					Comment:      list.Comment,
+					CreationTime: list.CreationTime,
+					List:         list.List,
+					Status:       "ACTIVO",
+				}
+			}
+		}
+	}
+	return AddressList{}
+}
+
+func (mr *mikrotikRepository) GetAddressList(listName string) []AddressList {
+	var results []AddressList
 	reply, err := mr.client.Run(
 		"/ip/firewall/address-list/print",
 	)
@@ -186,8 +203,15 @@ func (mr *mikrotikRepository) GetAddressList(listName string) []map[string]strin
 
 	for _, alist := range reply.Re {
 		if alist.Map["list"] == listName {
-			M = append(M, alist.Map)
+			L := AddressList{
+				ID:           alist.Map[".id"],
+				Address:      alist.Map["address"],
+				Comment:      alist.Map["comment"],
+				CreationTime: alist.Map["creation-time"],
+				List:         alist.Map["list"],
+			}
+			results = append(results, L)
 		}
 	}
-	return M
+	return results
 }
