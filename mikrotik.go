@@ -13,8 +13,8 @@ type mikrotikRepository struct {
 }
 
 type Mikrotik interface {
-	GetIdentity() (map[string]string, error)
-	GetSecrets(btsName string, btsHost string) ([]map[string]string, error)
+	GetIdentity() (string, error)
+	GetSecrets(bts string, host string) ([]Secret, error)
 	GetActiveConnections() ([]map[string]string, error)
 	EnableSNMP()
 	SetMacFromAC()
@@ -33,34 +33,38 @@ func NewMikrotikRepository(addr, user, password string) (Mikrotik, error) {
 	return &mikrotikRepository{client: dial}, nil
 }
 
-func (mr *mikrotikRepository) GetIdentity() (map[string]string, error) {
+func (mr *mikrotikRepository) GetIdentity() (string, error) {
 	identity := []map[string]string{}
 	mkt, err := mr.client.Run("/system/identity/print")
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
 	for _, r := range mkt.Re {
 		identity = append(identity, r.Map)
 	}
-	return identity[0], nil
+	return identity[0]["name"], nil
 }
 
-func (mr *mikrotikRepository) GetSecrets(
-	btsName string,
-	btsHost string,
-) ([]map[string]string, error) {
-	secret := []map[string]string{}
+func (mr *mikrotikRepository) GetSecrets(bts string, host string) ([]Secret, error) {
+	var secret []Secret
 
 	mkt, err := mr.client.Run("/ppp/secret/print")
+
 	if err != nil {
-		return nil, err
+		return []Secret{}, err
 	}
 
 	for _, d := range mkt.Re {
-		d.Map["host"] = btsHost
-		d.Map["bts"] = btsName
-		secret = append(secret, d.Map)
+		row := Secret{
+			Name:     d.Map["name"],
+			CallerID: d.Map["caller-id"],
+			Profile:  d.Map["profile"],
+			Comment:  d.Map["comment"],
+			Bts:      bts,
+			Host:     host,
+		}
+		secret = append(secret, row)
 	}
 	return secret, nil
 }
@@ -133,10 +137,10 @@ func (mr *mikrotikRepository) SetRemoteAddress() {
 
 	for _, secret := range secrets {
 		for _, active := range activeConnections {
-			if secret["name"] == active["name"] {
+			if secret.Name == active["name"] {
 				_, err := mr.client.Run(
 					"/ppp/secret/set",
-					fmt.Sprintf("=numbers=%s", secret["name"]),
+					fmt.Sprintf("=numbers=%s", secret.Name),
 					fmt.Sprintf("=remote-address=%s", active["address"]),
 				)
 				if err != nil {
