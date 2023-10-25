@@ -57,12 +57,13 @@ func (mr *mikrotikRepository) GetSecrets(bts string, host string) ([]Secret, err
 
 	for _, d := range mkt.Re {
 		row := Secret{
-			Name:     d.Map["name"],
-			CallerID: d.Map["caller-id"],
-			Profile:  d.Map["profile"],
-			Comment:  d.Map["comment"],
-			Bts:      bts,
-			Host:     host,
+			Name:          d.Map["name"],
+			CallerID:      d.Map["caller-id"],
+			Profile:       d.Map["profile"],
+			Comment:       d.Map["comment"],
+			RemoteAddress: d.Map["remote-address"],
+			Bts:           bts,
+			Host:          host,
 		}
 		secret = append(secret, row)
 	}

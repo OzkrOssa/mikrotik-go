@@ -1,12 +1,13 @@
 package mikrotik
 
 type Secret struct {
-	Name     string
-	CallerID string
-	Profile  string
-	Comment  string
-	Bts      string
-	Host     string
+	Name          string
+	CallerID      string
+	Profile       string
+	Comment       string
+	RemoteAddress string
+	Bts           string
+	Host          string
 }
 
 type AddressList struct {
